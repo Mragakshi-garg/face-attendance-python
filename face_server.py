@@ -30,16 +30,37 @@ logger = logging.getLogger(__name__)
 # Load InsightFace model — buffalo_s is lighter (~30MB) and fits Render free tier
 # ---------------------------------------------------------------------------
 
-logger.info("Loading InsightFace model (buffalo_s)...")
+# logger.info("Loading InsightFace model (buffalo_s)...")
 
-face_app = FaceAnalysis(
-    name="buffalo_s",
-    providers=["CPUExecutionProvider"]
-)
+# face_app = FaceAnalysis(
+#     name="buffalo_s",
+#     providers=["CPUExecutionProvider"]
+# )
 
-face_app.prepare(ctx_id=-1, det_size=(640, 640))
+# face_app.prepare(ctx_id=-1, det_size=(320,320))
 
-logger.info("InsightFace loaded successfully.")
+# logger.info("InsightFace loaded successfully.")
+face_app = None
+
+def get_face_app():
+    global face_app
+
+    if face_app is None:
+        logger.info("Loading InsightFace model...")
+
+        face_app = FaceAnalysis(
+            name="buffalo_s",
+            providers=["CPUExecutionProvider"]
+        )
+
+        face_app.prepare(
+            ctx_id=-1,
+            det_size=(320, 320)
+        )
+
+        logger.info("InsightFace loaded successfully.")
+
+    return face_app
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -135,7 +156,7 @@ def detect():
             f"Image received successfully. Shape={image.shape}"
         )
 
-        detected_faces = face_app.get(image)
+        detected_faces = get_face_app().get(image)
 
         faces = []
 
@@ -214,7 +235,7 @@ def encode():
                 "error": "Invalid image"
             }), 400
 
-        detected_faces = face_app.get(image)
+        detected_faces = get_face_app().get(image)
 
         if len(detected_faces) == 0:
 
