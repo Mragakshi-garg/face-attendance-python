@@ -27,17 +27,17 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Load InsightFace model
+# Load InsightFace model — buffalo_s is lighter (~30MB) and fits Render free tier
 # ---------------------------------------------------------------------------
 
-logger.info("Loading InsightFace model...")
+logger.info("Loading InsightFace model (buffalo_s)...")
 
 face_app = FaceAnalysis(
-    name="buffalo_l",
+    name="buffalo_s",
     providers=["CPUExecutionProvider"]
 )
 
-face_app.prepare(ctx_id=-1)
+face_app.prepare(ctx_id=-1, det_size=(640, 640))
 
 logger.info("InsightFace loaded successfully.")
 
@@ -249,10 +249,6 @@ def compare():
 
     try:
         data = request.get_json(force=True)
-        print("\n===== COMPARE REQUEST =====")
-        print(data)
-        print("===========================\n")
-        
 
         encoding = data.get("encoding")
         known_encodings = data.get("known_encodings")
@@ -278,60 +274,40 @@ def compare():
                 "confidence": 0.0
             })
 
-        target_encoding = np.array(
-            encoding
-        )
+        target_encoding = np.array(encoding)
 
         known_encoding_arrays = [
             np.array(e)
             for e in known_encodings
         ]
-        print("TARGET NORM =", np.linalg.norm(target_encoding))
 
-        if len(known_encoding_arrays) > 0:
-            print("KNOWN NORM =", np.linalg.norm(known_encoding_arrays[0]))
-
-        distances = []
+        # Calculate cosine similarity for each known encoding
+        similarities = []
 
         for known in known_encoding_arrays:
+            norm_known = np.linalg.norm(known)
+            norm_target = np.linalg.norm(target_encoding)
 
-            cosine = np.dot(known, target_encoding) / (
-                np.linalg.norm(known) *
-                np.linalg.norm(target_encoding)
-            )
+            if norm_known == 0 or norm_target == 0:
+                similarities.append(0.0)
+            else:
+                cosine = float(
+                    np.dot(known, target_encoding) / (norm_known * norm_target)
+                )
+                similarities.append(cosine)
 
-        distances.append(float(cosine))
+        best_idx = int(np.argmax(similarities))
+        best_similarity = similarities[best_idx]
 
-        best_idx = int(
-            np.argmin(distances)
-        )
-        best_similarity = distances[best_idx]
-
-        print("COSINE SIMILARITIES =", distances)
-        print("BEST SIMILARITY =", best_similarity)
-
-        is_match = best_similarity > 0.30
-
-        best_distance = float(
-            distances[best_idx]
+        logger.info(
+            f"Compare: best_similarity={best_similarity:.4f}, "
+            f"best_idx={best_idx}"
         )
 
-        threshold = 1.0
-        print("DISTANCES =", distances)
-        print("BEST DISTANCE =", best_distance)
-        is_match = (
-            best_distance < threshold
-        )
-
-        confidence = max(
-            0.0,
-            round(
-                1.0 - (
-                    best_distance / threshold
-                ),
-                4
-            )
-        )
+        # Threshold for cosine similarity match
+        threshold = 0.4
+        is_match = best_similarity > threshold
+        confidence = round(best_similarity, 4)
 
         return jsonify({
             "success": True,
@@ -341,44 +317,8 @@ def compare():
                 if is_match
                 else None
             ),
-            "confidence": round(best_similarity, 4)
+            "confidence": confidence
         })
-
-        # similarities = []
-
-        # for known in known_encoding_arrays:
-
-        #     cosine = np.dot(known, target_encoding) / (
-        #         np.linalg.norm(known) *
-        #         np.linalg.norm(target_encoding)
-        #     )
-
-        #     similarities.append(float(cosine))
-
-        # best_idx = int(np.argmax(similarities))
-
-        # best_similarity = similarities[best_idx]
-
-        # print("COSINE SIMILARITIES =", similarities)
-        # print("BEST SIMILARITY =", best_similarity)
-
-        # # Recommended threshold for attendance
-        # threshold = 0.65
-
-        # is_match = best_similarity > threshold
-
-        # confidence = round(best_similarity, 4)
-
-        # return jsonify({
-        #     "success": True,
-        #     "match": is_match,
-        #     "student_id": (
-        #         known_ids[best_idx]
-        #         if is_match
-        #         else None
-        #     ),
-        #     "confidence": confidence
-        # })  
 
     except Exception as e:
 
